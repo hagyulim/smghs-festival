@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>서문여자고등학교 페스티벌 좌석 예약</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 700px; margin: auto; }
+    h1 { text-align: center; }
+    #info { margin-bottom: 10px; text-align: center; }
+    input { padding: 8px; margin: 6px; width: 140px; }
+    button { padding: 8px 16px; }
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(20, 30px);
+      gap: 4px;
+      justify-content: center;
+      margin-top: 20px;
+    }
+    .seat {
+      width: 30px; height: 30px;
+      background-color: #ddd;
+      border-radius: 5px;
+      text-align: center;
+      line-height: 30px;
+      font-size: 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .seat.reserved {
+      background-color: #777;
+      cursor: not-allowed;
+      color: white;
+    }
+    .seat.selected {
+      background-color: #4caf50;
+      color: white;
+    }
+    #reserveBtn:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+    #message {
+      margin-top: 15px;
+      height: 24px;
+      color: green;
+      font-weight: bold;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🎉 서문여자고등학교 페스티벌 좌석 예약</h1>
+  <p style="text-align:center;">예약 시작: 2025년 8월 18일 오전 10시</p>
+
+  <div id="info">
+    <input type="text" id="stuNo" placeholder="학번 입력" maxlength="10" />
+    <input type="text" id="stuName" placeholder="이름 입력" maxlength="10" />
+    <br />
+    <button id="reserveBtn" disabled>예약하기</button>
+  </div>
+
+  <div id="grid"></div>
+
+  <div id="message"></div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+
+  <script>
+    // 🔥 Firebase 설정
+    const firebaseConfig = {
+      apiKey: "AIzaSyAu-8tVM0xC-r-iu4rV1Di1FRyaQwjdLyM",
+      authDomain: "smghs-festival.firebaseapp.com",
+      databaseURL: "https://smghs-festival-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "smghs-festival",
+      storageBucket: "smghs-festival.appspot.com",
+      messagingSenderId: "986182086170",
+      appId: "1:986182086170:web:dd9b231119f42174b1eba3"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const rows = 15, cols = 20;
+    const grid = document.getElementById("grid");
+    const btn = document.getElementById("reserveBtn");
+    const stuNo = document.getElementById("stuNo");
+    const stuName = document.getElementById("stuName");
+    const message = document.getElementById("message");
+
+    const reservedSeats = new Set();
+    const selectedSeats = new Set();
+
+    // 학생회 고정 좌석 (0행 전체)
+    for (let c = 0; c < cols; c++) {
+      reservedSeats.add(`0-${c}`);
+    }
+
+    // 버튼 상태 업데이트
+    function updateButtonState() {
+      btn.disabled = !(stuNo.value.trim() && stuName.value.trim() && selectedSeats.size > 0);
+    }
+
+    stuNo.addEventListener("input", updateButtonState);
+    stuName.addEventListener("input", updateButtonState);
+
+    // 좌석 렌더링
+    function renderGrid() {
+      grid.innerHTML = "";
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const seatId = `${r}-${c}`;
+          const div = document.createElement("div");
+          div.className = "seat";
+          div.textContent = r * cols + c + 1;
+
+          if (reservedSeats.has(seatId)) {
+            div.classList.add("reserved");
+          } else if (selectedSeats.has(seatId)) {
+            div.classList.add("selected");
+          }
+
+          if (!reservedSeats.has(seatId)) {
+            div.addEventListener("click", () => {
+              if (selectedSeats.has(seatId)) {
+                selectedSeats.delete(seatId);
+              } else {
+                if (selectedSeats.size >= 4) {
+                  alert("최대 4석까지 선택할 수 있습니다.");
+                  return;
+                }
+                selectedSeats.add(seatId);
+              }
+              renderGrid();
+              updateButtonState();
+            });
+          }
+
+          grid.appendChild(div);
+        }
+      }
+    }
+
+    // 예약된 좌석 실시간 반영
+    function listenReservations() {
+      const seatsRef = db.ref("reservedSeats");
+      seatsRef.on("value", (snapshot) => {
+        const data = snapshot.val() || {};
+        reservedSeats.clear();
+        for (let c = 0; c < cols; c++) reservedSeats.add(`0-${c}`); // 고정석 다시 추가
+
+        for (const seatId in data) {
+          reservedSeats.add(seatId);
+          if (selectedSeats.has(seatId)) {
+            selectedSeats.delete(seatId);
+            alert(`다른 사람이 ${parseInt(seatId.split('-')[0]) * cols + parseInt(seatId.split('-')[1]) + 1}번 좌석을 예약했어요. 선택에서 제거됩니다.`);
+          }
+        }
+        renderGrid();
+        updateButtonState();
+      });
+    }
+
+    // 예약 버튼 동작
+    btn.addEventListener("click", () => {
+      const name = stuName.value.trim();
+      const no = stuNo.value.trim();
+      if (!name || !no || selectedSeats.size === 0) return;
+
+      const seatsRef = db.ref("reservedSeats");
+
+      seatsRef.once("value").then(snapshot => {
+        const data = snapshot.val() || {};
+        for (const seatId of selectedSeats) {
+          if (data[seatId]) {
+            alert(`좌석 ${seatId}은 이미 예약됐어요.`);
+            return listenReservations(); // 다시 동기화
+          }
+        }
+
+        // DB에 좌석 저장
+        const updates = {};
+        const timestamp = Date.now();
+        selectedSeats.forEach(seatId => {
+          updates[seatId] = { studentNo: no, name: name, timestamp };
+        });
+
+        seatsRef.update(updates).then(() => {
+          message.textContent = "🎉 예약 완료!";
+          selectedSeats.clear();
+          stuNo.value = "";
+          stuName.value = "";
+          updateButtonState();
+          renderGrid();
+        });
+      });
+    });
+
+    // 시작 시 실행
+    listenReservations();
+    renderGrid();
+    updateButtonState();
+  </script>
+</body>
+</html>
