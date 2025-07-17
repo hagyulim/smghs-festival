@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>서문여자고등학교 페스티벌 좌석 예약</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    #grid { display: grid; grid-template-columns: repeat(20, 30px); gap: 4px; margin: 20px 0; }
+    .seat { width: 30px; height: 30px; background: #e0e0e0; cursor: pointer; text-align: center; line-height: 30px; font-size: 12px; border-radius: 4px; }
+    .reserved { background: #aaa; cursor: not-allowed; }
+    .selected { background: #6c6; }
+    #info { margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+  <h1>🎉 서문여자고등학교 페스티벌 좌석 예약</h1>
+  <p>예약 시작: 2025년 8월 18일 10:00</p>
+  <div id="info">
+    <input id="stuNo" placeholder="학번" maxlength="10" />
+    <input id="stuName" placeholder="이름" maxlength="10" />
+    <span>(최대 4석 선택 가능)</span>
+    <button id="reserveBtn" disabled>예약하기</button>
+  </div>
+  <div id="grid"></div>
+  <script>
+    const rows = 15, cols = 20;
+    const reservedSeats = new Set();
+    // 맨 앞줄(1행, 인덱스 0)을 미리 고정 예약 – 학생회용
+    for(let c=0; c<cols; c++){
+      reservedSeats.add(`0-${c}`);
+    }
+
+    const sel = new Set();
+    const grid = document.getElementById('grid');
+    const btn = document.getElementById('reserveBtn');
+    const stuNo = document.getElementById('stuNo');
+    const stuName = document.getElementById('stuName');
+
+    function renderGrid(){
+      grid.innerHTML = '';
+      for(let r=0;r<rows;r++){
+        for(let c=0;c<cols;c++){
+          const id = `${r}-${c}`;
+          const div = document.createElement('div');
+          div.className = 'seat' + (reservedSeats.has(id)? ' reserved':'');
+          div.textContent = r*cols + c + 1;
+          if(!reservedSeats.has(id)){
+            div.onclick = () => {
+              if(sel.has(id)){
+                sel.delete(id);
+                div.classList.remove('selected');
+              } else if(sel.size < 4){
+                sel.add(id);
+                div.classList.add('selected');
+              }
+              updateBtnState();
+            }
+          }
+          grid.appendChild(div);
+        }
+      }
+    }
+
+    function updateBtnState(){
+      btn.disabled = !(stuNo.value && stuName.value && sel.size>0);
+    }
+
+    stuNo.oninput = updateBtnState;
+    stuName.oninput = updateBtnState;
+
+    btn.onclick = () => {
+      const data = {
+        학번: stuNo.value,
+        이름: stuName.value,
+        좌석: Array.from(sel)
+      };
+      console.log('예약 데이터:', data);
+      // 실제 환경이라면 여기서 서버에 전송!
+      sel.forEach(id => reservedSeats.add(id));
+      sel.clear();
+      renderGrid();
+      updateBtnState();
+      alert('🎊 예약이 완료되었습니다!');
+    }
+
+    renderGrid();
+  </script>
+</body>
+</html>
