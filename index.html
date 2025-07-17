@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>서문여자고등학교 페스티벌 좌석 예약</title>
+<style>
+  body { font-family: Arial, sans-serif; padding: 20px; max-width: 700px; margin: auto; }
+  h1 { text-align: center; }
+  #info { margin-bottom: 10px; text-align:center; }
+  input { padding: 8px; margin: 5px 8px; width: 140px; font-size: 14px; }
+  button { padding: 8px 16px; font-size: 14px; cursor: pointer; }
+  #reserveBtn:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+  }
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(20, 30px);
+    gap: 4px;
+    justify-content: center;
+    margin-top: 20px;
+  }
+  .seat {
+    width: 30px; height: 30px;
+    background-color: #ddd;
+    border-radius: 5px;
+    text-align: center;
+    line-height: 30px;
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .seat.reserved {
+    background-color: #777;
+    cursor: not-allowed;
+    color: white;
+  }
+  .seat.selected {
+    background-color: #4caf50;
+    color: white;
+  }
+  #message {
+    margin-top: 15px;
+    min-height: 24px;
+    color: green;
+    font-weight: bold;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<h1>🎉 서문여자고등학교 페스티벌 좌석 예약</h1>
+<p style="text-align:center;">예약 시작: 2025년 8월 18일 오전 10시</p>
+
+<div id="info">
+  <input type="text" id="stuNo" placeholder="학번 입력" maxlength="10" />
+  <input type="text" id="stuName" placeholder="이름 입력" maxlength="10" />
+  <button id="reserveBtn" disabled>예약하기</button>
+</div>
+
+<div id="grid"></div>
+
+<div id="message"></div>
+
+<!-- Firebase JS SDK (compat 버전) -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+
+<script>
+  // Firebase 설정 (본인 프로젝트에 맞게 변경하세요)
+  const firebaseConfig = {
+    apiKey: "AIzaSyAu-8tVM0xC-r-iu4rV1Di1FRyaQwjdLyM",
+    authDomain: "smghs-festival.firebaseapp.com",
+    databaseURL: "https://smghs-festival-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "smghs-festival",
+    storageBucket: "smghs-festival.firebasestorage.app",
+    messagingSenderId: "986182086170",
+    appId: "1:986182086170:web:dd9b231119f42174b1eba3",
+    measurementId: "G-VJV1D0EV1D"
+  };
+
+  // Firebase 초기화
+  firebase.initializeApp(firebaseConfig);
+  const database = firebase.database();
+
+  const rows = 15;
+  const cols = 20;
+
+  const reservedSeats = new Set();
+  const selectedSeats = new Set();
+
+  const grid = document.getElementById("grid");
+  const btn = document.getElementById("reserveBtn");
+  const stuNo = document.getElementById("stuNo");
+  const stuName = document.getElementById("stuName");
+  const message = document.getElementById("message");
+
+  // 학생회 고정석 (0행) 예약 처리
+  for(let c=0; c<cols; c++) {
+    reservedSeats.add(`0-${c}`);
+  }
+
+  // 좌석 그리기
+  function renderGrid() {
+    grid.innerHTML = "";
+    for(let r=0; r<rows; r++) {
+      for(let c=0; c<cols; c++) {
+        const seatId = `${r}-${c}`;
+        const div = document.createElement("div");
+        div.classList.add("seat");
+        div.textContent = r*cols + c + 1;
+
+        if(reservedSeats.has(seatId)) {
+          div.classList.add("reserved");
+        } else if(selectedSeats.has(seatId)) {
+          div.classList.add("selected");
+        }
+
+        if(!reservedSeats.has(seatId)) {
+          div.addEventListener("click", () => {
+            if(selectedSeats.has(seatId)) {
+              selectedSeats.delete(seatId);
+            } else {
+              if(selectedSeats.size >= 4) {
+                alert("최대 4석까지 선택할 수 있습니다.");
+                return;
+              }
+              selectedSeats.add(seatId);
+            }
+            renderGrid();
+            updateButtonState();
+          });
+        }
+
+        grid.appendChild(div);
+      }
+    }
+  }
+
+  // 버튼 활성화 체크
+  function updateButtonState() {
+    btn.disabled = !(stuNo.value.trim() && stuName.value.trim() && selectedSeats.size > 0);
+  }
+
+  stuNo.addEventListener("input", updateButtonState);
+  stuName.addEventListener("input", updateButtonState);
+
+  // 실시간 예약 데이터 가져오기 및 구독
+  function listenReservations() {
+    const seatsRef = database.ref("reservedSeats");
+    seatsRef.on("value", (snapshot) => {
+      const data = snapshot.val() || {};
+      reservedSeats.clear();
+      for(let c=0; c<cols; c++) {
+        reservedSeats.add(`0-${c}`);
+      }
+      for(const seatId in data) {
+        const entry = data[seatId];
+        if(entry && entry.studentNo) {
+          reservedSeats.add(seatId);
+          if(selectedSeats.has(seatId)) {
+            selectedSeats.delete(seatId);
+            alert(`다른 사람이 ${parseInt(seatId.split('-')[0])*cols + parseInt(seatId.split('-')[1]) + 1}번 좌석을 예약했습니다. 선택이 취소되었습니다.`);
+          }
+        }
+      }
+      renderGrid();
+      updateButtonState();
+    });
+  }
+
+  // 예약하기 버튼 클릭 이벤트
+  btn.addEventListener("click", () => {
+    if(!stuNo.value.trim() || !stuName.value.trim() || selectedSeats.size === 0) {
+      alert("학번, 이름, 좌석을 모두 입력하고 선택해주세요.");
+      return;
+    }
+
+    const reservation = {
+      studentNo: stuNo.value.trim(),
+      name: stuName.value.trim(),
+      seats: Array.from(selectedSeats),
+      timestamp: Date.now()
+    };
+
+    const seatsRef = database.ref("reservedSeats");
+    seatsRef.once("value").then(snapshot => {
+      const data = snapshot.val() || {};
+
+      // 이미 예약된 좌석 확인
+      for(const seatId of reservation.seats) {
+        if(data[seatId] && data[seatId].studentNo) {
+          alert(`${parseInt(seatId.split('-')[0])*cols + parseInt(seatId.split('-')[1]) + 1}번 좌석이 이미 예약되어 있습니다. 다시 선택해주세요.`);
+          listenReservations();
+          return;
+        }
+      }
+
+      // 예약 정보 업데이트 준비
+      const updates = {};
+      reservation.seats.forEach(seatId => {
+        updates[`reservedSeats/${seatId}`] = {
+          studentNo: reservation.studentNo,
+          name: reservation.name,
+          timestamp: reservation.timestamp
+        };
+      });
+
+      console.log("업데이트 데이터:", updates);
+
+      database.ref().update(updates).then(() => {
+        message.textContent = `🎉 예약 완료! 좌석 번호: ${reservation.seats.map(id => parseInt(id.split('-')[0])*cols + parseInt(id.split('-')[1]) + 1).join(", ")}`;
+        selectedSeats.clear();
+        renderGrid();
+        updateButtonState();
+        stuNo.value = "";
+        stuName.value = "";
+      }).catch(error => {
+        alert("예약 중 오류가 발생했습니다. 다시 시도해주세요.");
+        console.error(error);
+      });
+    });
+  });
+
+  // 초기화 및 실시간 데이터 구독 시작
+  listenReservations();
+  renderGrid();
+  updateButtonState();
+
+</script>
+
+</body>
+</html>
